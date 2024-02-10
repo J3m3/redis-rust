@@ -15,7 +15,7 @@ fn main() -> Result<()> {
         handle_connection(&mut connection).context("failed to handle connection")?;
       }
       Err(e) => {
-        println!("error: {}", e);
+        bail!("failed to accept connection: {}", e);
       }
     }
   }
