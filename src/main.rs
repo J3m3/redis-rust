@@ -1,6 +1,6 @@
-use anyhow::{Context, Result};
-use bytes::{BufMut, BytesMut};
-use std::io::Write;
+use anyhow::{bail, Context, Result};
+use bytes::BytesMut;
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 
 fn main() -> Result<()> {
@@ -24,14 +24,27 @@ fn main() -> Result<()> {
 }
 
 fn handle_connection(connection: &mut TcpStream) -> Result<()> {
-  let mut buf = BytesMut::with_capacity(1024);
+  let mut recv_buf = BytesMut::with_capacity(1024);
+  loop {
+    match connection.read(&mut recv_buf) {
+      Ok(0) => {
+        println!("connection closed");
+        return Ok(());
+      }
+      Ok(n) => {
+        println!("read {} bytes", n);
 
-  let response = "+PONG\r\n";
-  buf.put(response.as_bytes());
+        let response = "+PONG\r\n";
+        let send_buf = response.as_bytes();
 
-  connection
-    .write_all(&buf)
-    .context("failed to write to stream")?;
-
-  Ok(())
+        connection
+          .write_all(send_buf)
+          .context("failed to write to stream")?;
+        connection.flush().context("failed to flush stream")?;
+      }
+      Err(e) => {
+        bail!("failed to read from stream: {}", e);
+      }
+    }
+  }
 }
