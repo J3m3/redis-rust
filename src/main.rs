@@ -24,7 +24,7 @@ fn main() -> Result<()> {
 }
 
 fn handle_connection(connection: &mut TcpStream) -> Result<()> {
-  let mut recv_buf = BytesMut::with_capacity(1024);
+  let mut recv_buf = BytesMut::zeroed(1024);
   loop {
     match connection.read(&mut recv_buf) {
       Ok(0) => {
