@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use bytes::{BufMut, BytesMut};
-use std::{io::Write, net::TcpListener};
+use std::io::Write;
+use std::net::{TcpListener, TcpStream};
 
 fn main() -> Result<()> {
   println!("Logs from your program will appear here!");
@@ -11,21 +12,26 @@ fn main() -> Result<()> {
     match _stream {
       Ok(mut stream) => {
         println!("accepted new connection");
-
-        let mut buf = BytesMut::with_capacity(1024);
-
-        let response = "+PONG\r\n";
-        buf.put(response.as_bytes());
-
-        stream
-          .write_all(&buf)
-          .context("failed to write to stream")?;
+        handle_connection(&mut stream).context("failed to handle connection")?;
       }
       Err(e) => {
         println!("error: {}", e);
       }
     }
   }
+
+  Ok(())
+}
+
+fn handle_connection(stream: &mut TcpStream) -> Result<()> {
+  let mut buf = BytesMut::with_capacity(1024);
+
+  let response = "+PONG\r\n";
+  buf.put(response.as_bytes());
+
+  stream
+    .write_all(&buf)
+    .context("failed to write to stream")?;
 
   Ok(())
 }
