@@ -1,32 +1,43 @@
 use anyhow::{bail, Context, Result};
 use bytes::BytesMut;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use tokio::{
+  io::AsyncReadExt,
+  io::AsyncWriteExt,
+  net::{TcpListener, TcpStream},
+};
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
   println!("Logs from your program will appear here!");
 
-  let listener = TcpListener::bind("127.0.0.1:6379").context("failed to bind to address")?;
+  let listener = TcpListener::bind("127.0.0.1:6379")
+    .await
+    .context("failed to bind to address")?;
 
-  for stream in listener.incoming() {
-    match stream {
-      Ok(mut connection) => {
-        println!("accepted new connection");
-        handle_connection(&mut connection).context("failed to handle connection")?;
+  loop {
+    match listener.accept().await {
+      Ok((connection, addr)) => {
+        println!("accepted new connection from {}", addr);
+        tokio::spawn(async move {
+          if let Err(e) = handle_connection(connection)
+            .await
+            .context("failed to handle connection")
+          {
+            eprintln!("{}", e);
+          }
+        });
       }
       Err(e) => {
-        bail!("failed to accept connection: {}", e);
+        eprintln!("failed to accept connection: {}", e);
       }
     }
   }
-
-  Ok(())
 }
 
-fn handle_connection(connection: &mut TcpStream) -> Result<()> {
+async fn handle_connection(mut connection: TcpStream) -> Result<()> {
   let mut recv_buf = BytesMut::zeroed(1024);
   loop {
-    match connection.read(&mut recv_buf) {
+    match connection.read(&mut recv_buf).await {
       Ok(0) => {
         println!("connection closed");
         return Ok(());
@@ -39,8 +50,9 @@ fn handle_connection(connection: &mut TcpStream) -> Result<()> {
 
         connection
           .write_all(send_buf)
+          .await
           .context("failed to write to stream")?;
-        connection.flush().context("failed to flush stream")?;
+        connection.flush().await.context("failed to flush stream")?;
       }
       Err(e) => {
         bail!("failed to read from stream: {}", e);
