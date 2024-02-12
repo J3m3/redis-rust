@@ -1,5 +1,8 @@
+pub mod resp_server;
+
 use anyhow::{bail, Context, Result};
 use bytes::BytesMut;
+use resp_server::generate_response;
 use tokio::{
   io::AsyncReadExt,
   io::AsyncWriteExt,
@@ -45,11 +48,12 @@ async fn handle_connection(mut connection: TcpStream) -> Result<()> {
       Ok(n) => {
         println!("read {} bytes", n);
 
-        let response = "+PONG\r\n";
-        let send_buf = response.as_bytes();
+        let request = &recv_buf[..n];
+        let response =
+          generate_response(request).context("failed to generate response from request")?;
 
         connection
-          .write_all(send_buf)
+          .write_all(&response)
           .await
           .context("failed to write to stream")?;
         connection.flush().await.context("failed to flush stream")?;
