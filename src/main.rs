@@ -1,7 +1,11 @@
+pub mod database;
 pub mod resp_server;
+
+use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Context, Result};
 use bytes::BytesMut;
+use database::DataBase;
 use resp_server::generate_response;
 use tokio::{
   io::AsyncReadExt,
@@ -11,7 +15,7 @@ use tokio::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  println!("Logs from your program will appear here!");
+  let db = Arc::new(Mutex::new(DataBase::new()));
 
   let listener = TcpListener::bind("127.0.0.1:6379")
     .await
@@ -21,8 +25,10 @@ async fn main() -> Result<()> {
     match listener.accept().await {
       Ok((connection, addr)) => {
         println!("accepted new connection from {}", addr);
+
+        let db = Arc::clone(&db);
         tokio::spawn(async move {
-          if let Err(e) = handle_connection(connection)
+          if let Err(e) = handle_connection(connection, &db)
             .await
             .context("failed to handle connection")
           {
@@ -37,7 +43,7 @@ async fn main() -> Result<()> {
   }
 }
 
-async fn handle_connection(mut connection: TcpStream) -> Result<()> {
+async fn handle_connection(mut connection: TcpStream, db: &Arc<Mutex<DataBase>>) -> Result<()> {
   let mut recv_buf = BytesMut::zeroed(1024);
   loop {
     match connection.read(&mut recv_buf).await {

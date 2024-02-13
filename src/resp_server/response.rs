@@ -1,7 +1,11 @@
-use super::{interpreter, parser, tokenizer, Command};
+use std::sync::{Arc, Mutex};
+
+use crate::database::DataBase;
+
+use super::{interpreter, parser, tokenizer, Command, NULL_BULK_STRING};
 use super::{Context, Result};
 
-pub fn generate_response(request: &[u8]) -> Result<Vec<u8>> {
+pub fn generate_response(request: &[u8], db: &Arc<Mutex<DataBase>>) -> Result<Vec<u8>> {
   let str = std::str::from_utf8(request)
     .context("failed to convert raw binary request to utf-8 string slice")?;
 
@@ -17,6 +21,17 @@ pub fn generate_response(request: &[u8]) -> Result<Vec<u8>> {
         format!("+{}\r\n", m).into_bytes()
       } else {
         "+PONG\r\n".to_owned().into_bytes()
+      }
+    }
+    Command::Set { key, value } => {
+      db.lock().unwrap().set(&key, &value);
+      format!("+OK\r\n").into_bytes()
+    }
+    Command::Get { key } => {
+      if let Some(value) = db.lock().unwrap().get(&key) {
+        format!("+{}\r\n", value).into_bytes()
+      } else {
+        format!("{}\r\n", NULL_BULK_STRING).into_bytes()
       }
     }
   };

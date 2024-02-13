@@ -6,31 +6,67 @@ pub fn interpret(ir: &RespValue) -> Result<Command> {
     bail!("client command should always generate array")
   };
 
-  if let Some(RespValue::BulkString(string_value)) = cmd.get(0) {
-    match string_value.to_uppercase().as_str() {
-      "ECHO" => {
-        let Some(RespValue::BulkString(message)) = cmd.get(1) else {
-          bail!("ECHO should contain message to echo");
+  let mut cmd_iter = cmd.into_iter();
+
+  let Some(RespValue::BulkString(string_value)) = cmd_iter.next() else {
+    bail!("client command array should always contain BulkString");
+  };
+
+  match string_value.to_uppercase().as_str() {
+    "ECHO" => {
+      let Some(message) = cmd_iter.next() else {
+        bail!("ECHO should contain message to echo");
+      };
+      let RespValue::BulkString(message) = message else {
+        bail!("ECHO should contain message as BulkString");
+      };
+      Ok(Command::Echo {
+        message: message.clone(),
+      })
+    }
+    "PING" => {
+      if let Some(message) = cmd_iter.next() {
+        let RespValue::BulkString(message) = message else {
+          bail!("PING should contain message as BulkString if exists");
         };
-        Ok(Command::Echo {
-          message: message.clone(),
+        Ok(Command::Ping {
+          message: Some(message.clone()),
         })
-      }
-      "PING" => {
-        if let Some(RespValue::BulkString(message)) = cmd.get(1) {
-          Ok(Command::Ping {
-            message: Some(message.clone()),
-          })
-        } else {
-          Ok(Command::Ping { message: None })
-        }
-      }
-      _ => {
-        bail!("unexpected command, or not yet implemented")
+      } else {
+        Ok(Command::Ping { message: None })
       }
     }
-  } else {
-    bail!("client command array should always contain BulkString")
+    "SET" => {
+      let Some(key) = cmd_iter.next() else {
+        bail!("SET should contain a key, but nothing is given");
+      };
+      let Some(value) = cmd_iter.next() else {
+        bail!("SET should contain a key, but nothing is given");
+      };
+      let RespValue::BulkString(key) = key else {
+        bail!("SET expects its key is BulkString");
+      };
+      let RespValue::BulkString(value) = value else {
+        bail!("SET expects its key is BulkString");
+      };
+
+      Ok(Command::Set {
+        key: key.clone(),
+        value: value.clone(),
+      })
+    }
+    "GET" => {
+      let Some(key) = cmd_iter.next() else {
+        bail!("GET should contain a key, but nothing is given");
+      };
+      let RespValue::BulkString(key) = key else {
+        bail!("GET expects its key is BulkString");
+      };
+      Ok(Command::Get { key: key.clone() })
+    }
+    _ => {
+      bail!("unexpected command, or not yet implemented")
+    }
   }
 }
 
