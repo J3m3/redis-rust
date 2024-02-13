@@ -4,7 +4,7 @@ pub mod resp_server;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Context, Result};
-use bytes::BytesMut;
+use bytes::{BufMut, BytesMut};
 use database::DataBase;
 use resp_server::generate_response;
 use tokio::{
@@ -56,12 +56,30 @@ async fn handle_connection(mut connection: TcpStream, db: &Arc<Mutex<DataBase>>)
 
         let request = &recv_buf[..n];
         let response =
-          generate_response(request).context("failed to generate response from request")?;
+          generate_response(request, db).context("failed to generate response from request");
 
-        connection
-          .write_all(&response)
-          .await
-          .context("failed to write to stream")?;
+        match response {
+          Ok(response) => {
+            connection
+              .write_all(&response)
+              .await
+              .context("failed to write response message to stream")?;
+          }
+          Err(err) => {
+            let mut err_buf = BytesMut::with_capacity(4096);
+
+            err_buf.put(format!("-ERR {}\n", err).as_bytes());
+            for cause in err.chain().skip(1) {
+              err_buf.put(format!("\tCaused by: {}\n", cause).as_bytes());
+            }
+            err_buf.put("\r\n".as_bytes());
+
+            connection
+              .write_all(&err_buf)
+              .await
+              .context("failed to write error message to stream")?;
+          }
+        }
         connection.flush().await.context("failed to flush stream")?;
       }
       Err(e) => {
