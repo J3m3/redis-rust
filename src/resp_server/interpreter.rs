@@ -216,4 +216,87 @@ mod tests_command_generation {
       );
     }
   }
+
+  mod test_set {
+    use super::*;
+
+    #[test]
+    fn should_work_with_proper_key_value() {
+      // SET mykey myvalue
+      let client_request = "*3\r\n$3\r\nSET\r\n$5\r\nmykey\r\n$7\r\nmyvalue\r\n".to_owned();
+      let tokens = tokenize(&client_request).unwrap();
+      let intermediate_representation = parse(&tokens).unwrap();
+      let command = interpret(&intermediate_representation).unwrap();
+
+      let expected_tokens = vec![
+        Token::Array(3),
+        Token::BulkString(3),
+        Token::StringValue("SET".to_owned()),
+        Token::BulkString(5),
+        Token::StringValue("mykey".to_owned()),
+        Token::BulkString(7),
+        Token::StringValue("myvalue".to_owned()),
+      ];
+      let expected_intermediate_representation = RespValue::Array(vec![
+        RespValue::BulkString("SET".to_owned()),
+        RespValue::BulkString("mykey".to_owned()),
+        RespValue::BulkString("myvalue".to_owned()),
+      ]);
+      let expected_command = Command::Set {
+        key: "mykey".to_owned(),
+        value: "myvalue".to_owned(),
+      };
+
+      assert!(
+        tokens == expected_tokens,
+        "tokenizer: SET with proper key value"
+      );
+      assert!(
+        intermediate_representation == expected_intermediate_representation,
+        "parser: SET with proper key value"
+      );
+      assert!(
+        command == expected_command,
+        "interperter: SET with proper key value"
+      );
+    }
+  }
+
+  mod test_get {
+    use super::*;
+
+    #[test]
+    fn should_work_with_proper_key() {
+      // SET mykey myvalue
+      let client_request = "*2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n".to_owned();
+      let tokens = tokenize(&client_request).unwrap();
+      let intermediate_representation = parse(&tokens).unwrap();
+      let command = interpret(&intermediate_representation).unwrap();
+
+      let expected_tokens = vec![
+        Token::Array(2),
+        Token::BulkString(3),
+        Token::StringValue("GET".to_owned()),
+        Token::BulkString(5),
+        Token::StringValue("mykey".to_owned()),
+      ];
+      let expected_intermediate_representation = RespValue::Array(vec![
+        RespValue::BulkString("GET".to_owned()),
+        RespValue::BulkString("mykey".to_owned()),
+      ]);
+      let expected_command = Command::Get {
+        key: "mykey".to_owned(),
+      };
+
+      assert!(tokens == expected_tokens, "tokenizer: GET with proper key");
+      assert!(
+        intermediate_representation == expected_intermediate_representation,
+        "parser: GET with proper key"
+      );
+      assert!(
+        command == expected_command,
+        "interperter: GET with proper key"
+      );
+    }
+  }
 }
