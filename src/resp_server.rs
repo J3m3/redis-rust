@@ -17,6 +17,7 @@ pub enum Command {
 pub enum Token {
   Array(usize),
   BulkString(usize),
+  NullBulkString,
   StringValue(String),
 }
 
@@ -24,4 +25,7 @@ pub enum Token {
 pub enum RespValue {
   Array(Vec<RespValue>),
   BulkString(String),
+  NullBulkString,
 }
+
+const NULL_BULK_STRING: &str = "$-1";

@@ -14,13 +14,17 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>> {
         tokens.push(Token::Array(length));
       }
       '$' => {
-        let length = read_until_crlf(&mut chars)
+        let length: isize = read_until_crlf(&mut chars)
           .parse()
           .context("unexpected token: usize value expected while lexing bulk string")?;
-        tokens.push(Token::BulkString(length));
+        if length < 0 {
+          tokens.push(Token::NullBulkString);
+        } else {
+          tokens.push(Token::BulkString(length as usize));
 
-        let string = read_until_crlf(&mut chars);
-        tokens.push(Token::StringValue(string));
+          let string = read_until_crlf(&mut chars);
+          tokens.push(Token::StringValue(string));
+        }
       }
       _ => {
         bail!("unexpected token: the given token not exists in grammar (or not yet implemented to be parsed)")

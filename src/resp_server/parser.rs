@@ -38,6 +38,7 @@ pub fn parse(tokens: &[Token]) -> Result<RespValue> {
           )
         }
       }
+      Some(Token::NullBulkString) => Ok(RespValue::NullBulkString),
       Some(Token::StringValue(_)) => {
         bail!("string value should always be consumed in BulkString match clause")
       }
