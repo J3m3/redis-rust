@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Context, Result};
 use bytes::{BufMut, BytesMut};
-use database::DataBase;
+use database::Database;
 use resp_server::generate_response;
 use tokio::{
   io::AsyncReadExt,
@@ -15,7 +15,7 @@ use tokio::{
 
 #[tokio::main]
 async fn main() -> Result<()> {
-  let db = Arc::new(Mutex::new(DataBase::new()));
+  let db = Arc::new(Mutex::new(Database::new()));
 
   let listener = TcpListener::bind("127.0.0.1:6379")
     .await
@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
   }
 }
 
-async fn handle_connection(mut connection: TcpStream, db: &Arc<Mutex<DataBase>>) -> Result<()> {
+async fn handle_connection(mut connection: TcpStream, db: &Arc<Mutex<Database>>) -> Result<()> {
   let mut recv_buf = BytesMut::zeroed(1024);
   loop {
     match connection.read(&mut recv_buf).await {

@@ -1,11 +1,12 @@
 use std::sync::{Arc, Mutex};
 
-use crate::database::DataBase;
+use crate::database::Database;
+use crate::resp_server::command::Execute;
 
-use super::{interpreter, parser, tokenizer, Command, NULL_BULK_STRING};
+use super::{interpreter, parser, tokenizer, ExecutionContext};
 use super::{Context, Result};
 
-pub fn generate_response(request: &[u8], db: &Arc<Mutex<DataBase>>) -> Result<Vec<u8>> {
+pub fn generate_response(request: &[u8], db: &Arc<Mutex<Database>>) -> Result<Vec<u8>> {
   let str = std::str::from_utf8(request)
     .context("failed to convert raw binary request to utf-8 string slice")?;
 
@@ -14,27 +15,10 @@ pub fn generate_response(request: &[u8], db: &Arc<Mutex<DataBase>>) -> Result<Ve
   let command =
     interpreter::interpret(&intermediate_representation).context("interpretation failed")?;
 
-  let response = match command {
-    Command::Echo { message } => format!("+{}\r\n", message).into_bytes(),
-    Command::Ping { message } => {
-      if let Some(m) = message {
-        format!("+{}\r\n", m).into_bytes()
-      } else {
-        "+PONG\r\n".to_owned().into_bytes()
-      }
-    }
-    Command::Set { key, value } => {
-      db.lock().unwrap().set(&key, &value);
-      format!("+OK\r\n").into_bytes()
-    }
-    Command::Get { key } => {
-      if let Some(value) = db.lock().unwrap().get(&key) {
-        format!("+{}\r\n", value).into_bytes()
-      } else {
-        format!("{}\r\n", NULL_BULK_STRING).into_bytes()
-      }
-    }
-  };
+  let context = ExecutionContext { db };
+  let response = command
+    .execute(&context)
+    .context("failed to execute command")?;
 
   Ok(response)
 }
@@ -42,9 +26,11 @@ pub fn generate_response(request: &[u8], db: &Arc<Mutex<DataBase>>) -> Result<Ve
 #[cfg(test)]
 mod tests_response_generation {
   use super::*;
+  use crate::database::*;
+  use crate::resp_server::*;
 
-  fn mock_db() -> Arc<Mutex<DataBase>> {
-    Arc::new(Mutex::new(DataBase::new()))
+  fn mock_db() -> Arc<Mutex<Database>> {
+    Arc::new(Mutex::new(Database::new()))
   }
 
   #[test]
@@ -76,7 +62,8 @@ mod tests_response_generation {
       let expected_response = b"+OK\r\n".to_vec();
       assert_eq!(respone, expected_response);
 
-      assert!(value == db.lock().unwrap().get(key).unwrap());
+      assert_eq!(value, db.lock().unwrap().get(key).unwrap().value);
+      assert_eq!(None, db.lock().unwrap().get(key).unwrap().expire_time);
     }
 
     #[test]
@@ -84,9 +71,13 @@ mod tests_response_generation {
       let command_type = "SET";
       let key = "mykey";
       let value = "myvalue";
+      let data = Data {
+        value: value.to_owned(),
+        expire_time: None,
+      };
 
       let db = mock_db();
-      db.lock().unwrap().set(key, value);
+      db.lock().unwrap().set(key, &data);
 
       let new_value = "newvalue";
 
@@ -103,7 +94,8 @@ mod tests_response_generation {
       let expected_response = b"+OK\r\n".to_vec();
       assert_eq!(respone, expected_response);
 
-      assert!(new_value == db.lock().unwrap().get(key).unwrap());
+      assert_eq!(new_value, db.lock().unwrap().get(key).unwrap().value);
+      assert_eq!(None, db.lock().unwrap().get(key).unwrap().expire_time);
     }
   }
 
@@ -115,9 +107,13 @@ mod tests_response_generation {
       let command_type = "GET";
       let key = "mykey";
       let value = "myvalue";
+      let data = Data {
+        value: value.to_owned(),
+        expire_time: None,
+      };
 
       let db = mock_db();
-      db.lock().unwrap().set(key, value);
+      db.lock().unwrap().set(key, &data);
 
       let client_request = format!(
         "*2\r\n${}\r\n{}\r\n${}\r\n{}\r\n",
@@ -127,7 +123,12 @@ mod tests_response_generation {
         key
       );
       let respone = generate_response(client_request.as_bytes(), &db).unwrap();
-      let expected_response = format!("+{}\r\n", value).as_bytes().to_vec();
+      let expected_response = format!("+{}\r\n", data.value).as_bytes().to_vec();
+      println!(
+        "response: {:?} / expected_response: {:?}",
+        String::from_utf8(respone.clone()).unwrap(),
+        String::from_utf8(expected_response.clone()).unwrap()
+      );
       assert_eq!(respone, expected_response);
     }
 

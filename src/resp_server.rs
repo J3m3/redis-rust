@@ -1,19 +1,13 @@
+mod command;
 mod interpreter;
 mod parser;
 mod response;
 mod tokenizer;
 
+pub use command::*;
 pub use response::generate_response;
 
 use anyhow::{bail, Context, Result};
-
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum Command {
-  Ping { message: Option<String> },
-  Echo { message: String },
-  Set { key: String, value: String },
-  Get { key: String },
-}
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Token {

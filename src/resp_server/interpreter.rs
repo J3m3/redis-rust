@@ -1,5 +1,7 @@
+use anyhow::Context;
+
 use super::{bail, Result};
-use super::{Command, RespValue};
+use super::{Command, Echo, Get, Ping, RespValue, Set};
 
 pub fn interpret(ir: &RespValue) -> Result<Command> {
   let RespValue::Array(cmd) = ir else {
@@ -20,20 +22,20 @@ pub fn interpret(ir: &RespValue) -> Result<Command> {
       let RespValue::BulkString(message) = message else {
         bail!("ECHO should contain message as BulkString");
       };
-      Ok(Command::Echo {
+      Ok(Command::Echo(Echo {
         message: message.clone(),
-      })
+      }))
     }
     "PING" => {
       if let Some(message) = cmd_iter.next() {
         let RespValue::BulkString(message) = message else {
           bail!("PING should contain message as BulkString if exists");
         };
-        Ok(Command::Ping {
+        Ok(Command::Ping(Ping {
           message: Some(message.clone()),
-        })
+        }))
       } else {
-        Ok(Command::Ping { message: None })
+        Ok(Command::Ping(Ping { message: None }))
       }
     }
     "SET" => {
@@ -50,10 +52,16 @@ pub fn interpret(ir: &RespValue) -> Result<Command> {
         bail!("SET expects its key is BulkString");
       };
 
-      Ok(Command::Set {
+      let mut set_cmd = Set {
         key: key.clone(),
         value: value.clone(),
-      })
+        ..Set::default()
+      };
+      set_cmd
+        .set_option(&mut cmd_iter)
+        .context("failed to set option")?;
+
+      Ok(Command::Set(set_cmd))
     }
     "GET" => {
       let Some(key) = cmd_iter.next() else {
@@ -62,7 +70,7 @@ pub fn interpret(ir: &RespValue) -> Result<Command> {
       let RespValue::BulkString(key) = key else {
         bail!("GET expects its key is BulkString");
       };
-      Ok(Command::Get { key: key.clone() })
+      Ok(Command::Get(Get { key: key.clone() }))
     }
     _ => {
       bail!("unexpected command, or not yet implemented")
@@ -97,9 +105,9 @@ mod tests_command_generation {
         RespValue::BulkString("ECHO".to_owned()),
         RespValue::BulkString("hey".to_owned()),
       ]);
-      let expected_command = Command::Echo {
+      let expected_command = Command::Echo(Echo {
         message: "hey".to_owned(),
-      };
+      });
 
       assert!(
         tokens == expected_tokens,
@@ -133,9 +141,9 @@ mod tests_command_generation {
         RespValue::BulkString("ECHO".to_owned()),
         RespValue::BulkString("".to_owned()),
       ]);
-      let expected_command = Command::Echo {
+      let expected_command = Command::Echo(Echo {
         message: "".to_owned(),
-      };
+      });
 
       assert!(
         tokens == expected_tokens,
@@ -172,9 +180,9 @@ mod tests_command_generation {
         RespValue::BulkString("PING".to_owned()),
         RespValue::BulkString("hey".to_owned()),
       ]);
-      let expected_command = Command::Ping {
+      let expected_command = Command::Ping(Ping {
         message: Some("hey".to_owned()),
-      };
+      });
 
       assert!(tokens == expected_tokens, "tokenizer: PING with message");
       assert!(
@@ -200,7 +208,7 @@ mod tests_command_generation {
       ];
       let expected_intermediate_representation =
         RespValue::Array(vec![RespValue::BulkString("PING".to_owned())]);
-      let expected_command = Command::Ping { message: None };
+      let expected_command = Command::Ping(Ping { message: None });
 
       assert!(
         tokens == expected_tokens,
@@ -242,10 +250,11 @@ mod tests_command_generation {
         RespValue::BulkString("mykey".to_owned()),
         RespValue::BulkString("myvalue".to_owned()),
       ]);
-      let expected_command = Command::Set {
+      let expected_command = Command::Set(Set {
         key: "mykey".to_owned(),
         value: "myvalue".to_owned(),
-      };
+        ..Set::default()
+      });
 
       assert!(
         tokens == expected_tokens,
@@ -284,9 +293,9 @@ mod tests_command_generation {
         RespValue::BulkString("GET".to_owned()),
         RespValue::BulkString("mykey".to_owned()),
       ]);
-      let expected_command = Command::Get {
+      let expected_command = Command::Get(Get {
         key: "mykey".to_owned(),
-      };
+      });
 
       assert!(tokens == expected_tokens, "tokenizer: GET with proper key");
       assert!(
